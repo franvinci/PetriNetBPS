@@ -62,17 +62,25 @@ def return_scaler_params(net, t_dicts_dataset, data_attributes_categorical):
     scaler_params = dict()
     t = list(net.transitions)[0]
     for x in list(t_dicts_dataset[t].keys()):
-        if x != 'class' and (x not in data_attributes_categorical):# and (x not in ['<START>', '<END>']):
+        if x != 'class' and (x not in data_attributes_categorical):
             scaler_params[x] = (min(t_dicts_dataset[t][x]), max(t_dicts_dataset[t][x]))
     for t in net.transitions:
         for x in list(t_dicts_dataset[t].keys()):
-            if x != 'class' and (x not in data_attributes_categorical):# and (x not in ['<START>', '<END>']):
+            if x != 'class' and (x not in data_attributes_categorical):
                 scaler_params[x] = (min(min(t_dicts_dataset[t][x]),scaler_params[x][0]), max(max(t_dicts_dataset[t][x]), scaler_params[x][1]))
     
     return scaler_params
 
 
-def build_models(log, net, initial_marking, final_marking, scaler,data_attributes, data_attributes_categorical, attr_values_categorical, net_transition_labels, history_weights, scaler_params):
+def build_models(log, 
+                 net, 
+                 initial_marking, 
+                 final_marking,
+                 data_attributes, 
+                 data_attributes_categorical, 
+                 attr_values_categorical, 
+                 net_transition_labels, 
+                 history_weights):
 
     t_dicts_dataset = build_datasets(log, net, initial_marking, final_marking, history_weights, data_attributes, net_transition_labels)
     models_t = dict()
@@ -84,19 +92,15 @@ def build_models(log, net, initial_marking, final_marking, scaler,data_attribute
         if len(data_t['class'].unique())<2:
             models_t[t] = None
             continue
-        if scaler:
-            for c in list(data_t.columns):
-                if c != 'class' and (c not in data_attributes_categorical):# and (c not in ['<START>', '<END>']):
-                    if scaler_params[c][0] != scaler_params[c][1]:
-                        data_t[c] = (data_t[c] - scaler_params[c][0]) / (scaler_params[c][1] - scaler_params[c][0])
+        # if scaler:
+        #     for c in list(data_t.columns):
+        #         if c != 'class' and (c not in data_attributes_categorical):
+        #             if scaler_params[c][0] != scaler_params[c][1]:
+        #                 data_t[c] = (data_t[c] - scaler_params[c][0]) / (scaler_params[c][1] - scaler_params[c][0])
         for a in data_attributes_categorical:
             for v in attr_values_categorical[a]:
                 data_t[a+'_'+v] = (data_t[a] == v)*1
             del data_t[a]
-
-        # if history_weights:
-        #     del data_t['<START>']
-        #     del data_t['<END>']
 
         X = data_t.drop(columns=['class'])
         y = data_t['class']

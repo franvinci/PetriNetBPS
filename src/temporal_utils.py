@@ -17,7 +17,6 @@ def n_to_weekday(i):
     return dict(zip(range(7), weekday_labels))[i]
 
 
-# TODO sistema con i calendar
 def compute_execution_times(log):
 
     activities = list(pm4py.get_event_attribute_values(log, 'concept:name').keys())
@@ -27,10 +26,6 @@ def compute_execution_times(log):
             act = event['concept:name']
             time_0 = event['start:timestamp']
             time_1 = event['time:timestamp']
-            # if not time_0.tzinfo:
-            #     time_0 = time_0.replace(tzinfo=timezone.utc)
-            # if not time_1.tzinfo:
-            #     time_1 = time_1.replace(tzinfo=timezone.utc)
             activities_extimes[act].append((time_1 - time_0).total_seconds())
 
     return activities_extimes
@@ -81,7 +76,6 @@ def find_arrival_calendar(log=None, mode='24/7'):
         return calendar
 
 
-# TODO sistema con i calendar
 def compute_arrival_times(log, arrival_calendar):
 
     arrival_times = []
@@ -97,17 +91,13 @@ def compute_arrival_times(log, arrival_calendar):
         h_0 = log[i-1][0]['start:timestamp'].hour
         if not (arrival_calendar[wd][0] <= h_0 <= arrival_calendar[wd][1]) and not ((arrival_calendar[wd][0] <= h_1 <= arrival_calendar[wd][1])):
             continue
-        # if not time_0.tzinfo:
-        #     time_0 = time_0.replace(tzinfo=timezone.utc)
-        # if not time_1.tzinfo:
-        #     time_1 = time_1.replace(tzinfo=timezone.utc)
         arrival_times.append((time_1-time_0).total_seconds())
     
     return arrival_times
     
 
-def find_arrival_distribution(log):
-    return find_best_fit_distribution(compute_arrival_times(log))[:2]
+def find_arrival_distribution(log, arrival_calendar):
+    return find_best_fit_distribution(compute_arrival_times(log, arrival_calendar))[:2]
 
 
 def return_time_from_calendar(current_time, calendar):
