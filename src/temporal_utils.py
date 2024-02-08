@@ -1,5 +1,5 @@
 import pm4py
-from datetime import timezone, timedelta
+from datetime import timedelta
 from src.distribution_utils import find_best_fit_distribution
 
 possible_distributions = [
@@ -17,7 +17,7 @@ def n_to_weekday(i):
     return dict(zip(range(7), weekday_labels))[i]
 
 
-def compute_execution_times(log):
+def compute_execution_times(log, filter_by_res=None):
 
     activities = list(pm4py.get_event_attribute_values(log, 'concept:name').keys())
     activities_extimes = {a: [] for a in activities}
@@ -26,19 +26,36 @@ def compute_execution_times(log):
             act = event['concept:name']
             time_0 = event['start:timestamp']
             time_1 = event['time:timestamp']
-            activities_extimes[act].append((time_1 - time_0).total_seconds())
+            if filter_by_res:
+                res = event['org:resource']
+                if res in filter_by_res:
+                    activities_extimes[act].append((time_1 - time_0).total_seconds())
+            else:
+                activities_extimes[act].append((time_1 - time_0).total_seconds())
+    
+    for a in activities:
+        if not activities_extimes[a]:
+            del activities_extimes[a]
 
     return activities_extimes
 
 
-def find_execution_distributions(log):
+def find_execution_distributions(log, mode='activity'):
     """
     output: {ACTIVITY_NAME: (DISTRNAME, {PARAMS: VALUE})}
     """
-    activities_extimes = compute_execution_times(log)
-    activities = list(activities_extimes.keys())
-    exec_distr = {a: find_best_fit_distribution(activities_extimes[a])[:2] for a in activities}
-
+    if mode == 'activity':
+        activities_extimes = compute_execution_times(log)
+        activities = list(activities_extimes.keys())
+        exec_distr = {a: find_best_fit_distribution(activities_extimes[a])[:2] for a in activities}
+    if mode == 'resource':
+        resources = pm4py.get_event_attribute_values(log, "org:resource")
+        exec_distr = dict()
+        for res in resources:
+            activities_extimes = compute_execution_times(log, filter_by_res=[res])
+            activities = list(activities_extimes.keys())
+            exec_distr[res] = {a: find_best_fit_distribution(activities_extimes[a])[:2] for a in activities}
+            
     return exec_distr
 
 

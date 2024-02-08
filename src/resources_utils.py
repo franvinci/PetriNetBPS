@@ -2,34 +2,33 @@ import pm4py
 from src.temporal_utils import n_to_weekday
 
 
-# TODO metti se c'è org:resources
 def find_roles(log):
     """
-    {role: (listOfAct, numberOfResorces)}
+    {role: (listOfAct, listOfResorces)}
     """
 
     try:
         name_roles = list(pm4py.get_event_attribute_values(log, "org:role").keys())
-        roles_res = {n: ([], []) for n in name_roles}
+        roles = {n: ([], []) for n in name_roles}
         for trace in log:
             for event in trace:
                 res = event['org:resource']
                 role = event['org:role']
                 activity = event['concept:name']
-                if activity not in roles_res[role][0]:
-                    roles_res[role][0].append(activity)
-                if res not in roles_res[role][1]:
-                    roles_res[role][1].append(res)
+                if activity not in roles[role][0]:
+                    roles[role][0].append(activity)
+                if res not in roles[role][1]:
+                    roles[role][1].append(res)
 
-        roles = dict()
-        for n in roles_res.keys():
-            roles[n] =  (roles_res[n][0], len(roles_res[n][1]))
+        # roles = dict()
+        # for n in roles_res.keys():
+        #     roles[n] =  (roles_res[n][0], len(roles_res[n][1]))
 
     except:
         roles_pm4py = pm4py.discover_organizational_roles(log)
         roles = dict()
         for i in range(len(roles_pm4py)):
-            roles['ROLE'+str(i)] =  (roles_pm4py[i].activities, len(roles_pm4py[i].originator_importance))
+            roles['ROLE'+str(i)] =  (roles_pm4py[i].activities, roles_pm4py[i].originator_importance)
     return roles
 
 

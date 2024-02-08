@@ -4,10 +4,10 @@ import pandas as pd
 import pm4py
 from sklearn.linear_model import LogisticRegression
 from src.temporal_utils import find_execution_distributions, find_arrival_distribution, find_arrival_calendar, return_time_from_calendar
-from src.resources_utils import n_to_weekday, create_resources, find_roles, find_calendars
+from src.resources_utils import create_resources, find_roles, find_calendars
 from src.distribution_utils import sample_time
 from datetime import datetime, timedelta
-from src.transitions_utils import return_transitions_frequency, build_models, return_scaler_params, compute_proba, build_datasets
+from src.transitions_utils import return_transitions_frequency, build_models, compute_proba
 from src.controlflow_utils import return_enabled_transitions, return_fired_transition, update_markings
 
 
@@ -27,12 +27,13 @@ class SimulatorParameters:
         self.exec_distr = {l: ('fixed', {'value': 0}) for l in self.net_transition_labels}
         self.roles = None
         self.role_calendars = None
-        self.act_resources = dict()
+        # self.act_resources = dict()
 
         self.mode_trans_weights = None
         self.data_attributes = []
         self.data_attributes_categorical = []
         self.mode_history = None
+        self.mode_ex_time = 'activity'
 
 
     # TODO aggiungi scaler
@@ -68,6 +69,7 @@ class SimulatorParameters:
     def discover_from_eventlog(self, 
                                log, 
                                disc_weight_transitions=True, disc_arrival_time_distr = True, disc_arrival_calendar=True, disc_exec_distr=True, disc_role_calendars=True, return_data_distr=True,
+                               mode_ex_time='activity',
                                mode_trans_weights='frequency', data_attributes=[], categorical_attributes=[], history_weights=None):
 
         if disc_weight_transitions:
@@ -83,7 +85,8 @@ class SimulatorParameters:
             self.arrival_time_distr = find_arrival_distribution(log, self.arrival_calendar)
         
         if disc_exec_distr:
-            self.exec_distr = find_execution_distributions(log)
+            self.mode_ex_time = mode_ex_time
+            self.exec_distr = find_execution_distributions(log, mode_ex_time)
 
         if disc_role_calendars:
             if not self.roles:
@@ -113,8 +116,9 @@ class SimulatorEngine:
 
         n_sim = len(traces_times)
         exec_times_act = dict()
-        for act in self.simulation_parameters.net_transition_labels:
-            exec_times_act[act] = list(sample_time(self.simulation_parameters.exec_distr[act], self.count_activities_sim[act]))
+        if self.simulation_parameters.mode_ex_time == 'activity':
+            for act in self.simulation_parameters.net_transition_labels:
+                exec_times_act[act] = list(sample_time(self.simulation_parameters.exec_distr[act], self.count_activities_sim[act]))
 
         simulated_events = []
         current_time = self.resource_availability.min()
@@ -150,18 +154,21 @@ class SimulatorEngine:
             act = en_t[1][0]
             del traces_times[i][0][0]
 
-            resources = self.act_resources[act]
-            available_resource = list(self.resource_availability[resources][(self.resource_availability[resources]<current_time)].index)
+            resources_act = self.act_resources[act]
+            available_resource = list(self.resource_availability[resources_act][(self.resource_availability[resources_act]<current_time)].index)
             if available_resource:
                 resource = random.choices(available_resource)[0]
             else:
-                resource_role_availability = {r: self.resource_availability[r] for r in resources}
+                resource_role_availability = {r: self.resource_availability[r] for r in resources_act}
                 resource = min(resource_role_availability, key=resource_role_availability.get)
                 current_time = resource_role_availability[resource]
 
-            role = '_'.join(resource.split('_')[:-1])
+            role = self.resource_role[resource]
             start_time = return_time_from_calendar(current_time, self.simulation_parameters.role_calendars[role])
-            ex_time = int(exec_times_act[act].pop())
+            if self.simulation_parameters.mode_ex_time == 'activity':
+                ex_time = int(exec_times_act[act].pop())
+            if self.simulation_parameters.mode_ex_time == 'resource':
+                ex_time = sample_time(self.simulation_parameters.exec_distr[resource][act], 1)[0]
             end_time = start_time + timedelta(seconds=ex_time)
             traces_times[i][-2] = end_time
             if not traces_times[i][0]:
@@ -296,14 +303,17 @@ class SimulatorEngine:
             starting_time = datetime.strptime(starting_time, "%Y-%m-%d %H:%M:%S")
         
         n_sim = int(n_istances/(1-remove_head_tail))
-        self.role_resources = create_resources(self.simulation_parameters.roles)  # {role: list of res}
-        resources = []
+        if type(list(self.simulation_parameters.roles.values())[0][1]) == int:
+            self.role_resources = create_resources(self.simulation_parameters.roles)  # {role: list of res}
+        else:
+            self.role_resources = {role: self.simulation_parameters.roles[role][1] for role in self.simulation_parameters.roles.keys()}
+        self.resources = []
         for role in self.simulation_parameters.roles:
-            resources.extend(self.role_resources[role])
+            self.resources.extend(self.role_resources[role])
         
         if not resource_availability:
             self.resource_availability = dict()
-            for r in resources:
+            for r in self.resources:
                 self.resource_availability[r] = starting_time
             self.resource_availability = pd.Series(self.resource_availability)
         else:
@@ -314,6 +324,11 @@ class SimulatorEngine:
             for role in self.simulation_parameters.roles.keys():
                 if act in self.simulation_parameters.roles[role][0]:
                     self.act_resources[act] = self.role_resources[role]
+        
+        self.resource_role = dict()
+        for role in self.role_resources.keys():
+            for res in self.role_resources[role]:
+                self.resource_role[res] = role 
 
         current_time = starting_time
         arrival_times_diff = list(sample_time(self.simulation_parameters.arrival_time_distr, N=n_sim))
@@ -385,5 +400,6 @@ class SimulatorEngine:
         self.resource_availability = None
         self.act_resources = None
         self.count_activities_sim = None
+        self.resource_role = None
 
         return log_data
