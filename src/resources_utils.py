@@ -78,4 +78,6 @@ def find_calendars(roles, mode='24/7', log=None):
                 if len(log_df_act_roles_wd) == 0:
                     calendars[role][wd] = None
                 calendars[role][wd] = (log_df_act_roles_wd['hour'].min(), log_df_act_roles_wd['hour'].max())
+                if not(calendars[role][wd][0] >= 0):
+                    calendars[role][wd] = None
         return calendars

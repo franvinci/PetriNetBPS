@@ -1,6 +1,7 @@
 import pm4py
 from datetime import timedelta
 from src.distribution_utils import find_best_fit_distribution
+from tqdm import tqdm
 
 possible_distributions = [
     'fixed',
@@ -51,7 +52,8 @@ def find_execution_distributions(log, mode='activity'):
     if mode == 'resource':
         resources = pm4py.get_event_attribute_values(log, "org:resource")
         exec_distr = dict()
-        for res in resources:
+        print('Finding best fit execution time distribution for each resources...')
+        for res in tqdm(resources):
             activities_extimes = compute_execution_times(log, filter_by_res=[res])
             activities = list(activities_extimes.keys())
             exec_distr[res] = {a: find_best_fit_distribution(activities_extimes[a])[:2] for a in activities}
@@ -90,6 +92,8 @@ def find_arrival_calendar(log=None, mode='24/7'):
                 calendar[wd] = (min(calendar_distr[wd]), max(calendar_distr[wd]))
             else:
                 calendar[wd] = None
+            if not(calendar[wd][0] >= 0):
+                calendar[wd] = None
         return calendar
 
 
@@ -126,7 +130,7 @@ def return_time_from_calendar(current_time, calendar):
             current_time = current_time.replace(hour=calendar[wd][0], minute=0, second=0)
             return current_time
         elif h > calendar[wd][1]:
-            current_time = current_time + timedelta(days=j_day)
+            current_time = current_time + timedelta(days=1)
             n_wd = current_time.weekday()
             wd = n_to_weekday(n_wd)
         else:

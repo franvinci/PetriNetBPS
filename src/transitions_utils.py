@@ -4,6 +4,8 @@ import pandas as pd
 from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
 from src.controlflow_utils import return_enabled_and_fired_transitions
 from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 
 
 def return_transitions_frequency(log, net, initial_marking, final_marking):
@@ -72,6 +74,24 @@ def return_scaler_params(net, t_dicts_dataset, data_attributes_categorical):
     return scaler_params
 
 
+def get_scaler_params(t_dicts_dataset):
+
+    scaler_params_list = dict()
+    for t in t_dicts_dataset.keys():
+        for f in t_dicts_dataset[t].keys():
+            if f in scaler_params_list.keys():
+                scaler_params_list[f][0].append(min(t_dicts_dataset[t][f]))
+                scaler_params_list[f][1].append(max(t_dicts_dataset[t][f]))
+            else:
+                scaler_params_list[f] = ([min(t_dicts_dataset[t][f])], [max(t_dicts_dataset[t][f])])
+
+    scaler_params = dict()
+    for f in scaler_params_list.keys():
+        scaler_params[f] = (min(scaler_params_list[f][0]), max(scaler_params_list[f][1]))
+
+    return scaler_params
+
+
 def build_models(log, 
                  net, 
                  initial_marking, 
@@ -79,10 +99,18 @@ def build_models(log,
                  data_attributes, 
                  data_attributes_categorical, 
                  attr_values_categorical, 
-                 net_transition_labels, 
-                 history_weights):
+                 net_transition_labels,
+                 history_weights,
+                 scaler = True,
+                 model_type='LogisticRegression', max_depth=3):
 
     t_dicts_dataset = build_datasets(log, net, initial_marking, final_marking, history_weights, data_attributes, net_transition_labels)
+    
+    if scaler:
+        scaler_params = get_scaler_params(t_dicts_dataset)
+    else:
+        scaler_params = None
+
     models_t = dict()
     coefficients_list = []
     coeff_index = []
@@ -92,34 +120,55 @@ def build_models(log,
         if len(data_t['class'].unique())<2:
             models_t[t] = None
             continue
-        # if scaler:
-        #     for c in list(data_t.columns):
-        #         if c != 'class' and (c not in data_attributes_categorical):
-        #             if scaler_params[c][0] != scaler_params[c][1]:
-        #                 data_t[c] = (data_t[c] - scaler_params[c][0]) / (scaler_params[c][1] - scaler_params[c][0])
+
+        if scaler:
+            for c in list(data_t.columns):
+                if c != 'class' and (c not in data_attributes_categorical):
+                    if scaler_params[c][0] != scaler_params[c][1]:
+                        data_t[c] = (data_t[c] - scaler_params[c][0]) / (scaler_params[c][1] - scaler_params[c][0])
+        
         for a in data_attributes_categorical:
             for v in attr_values_categorical[a]:
                 data_t[a+'_'+v] = (data_t[a] == v)*1
             del data_t[a]
 
-        X = data_t.drop(columns=['class'])
-        y = data_t['class']
+        X = data_t.drop(columns=['class']).values
+        y = data_t['class'].values
 
-        clf_t = LogisticRegression(random_state=72).fit(X, y)
+        if model_type == 'LogisticRegression':
+            clf_t = LogisticRegression(random_state=72).fit(X, y)
+        elif model_type == 'DecisionTree':
+            clf_t = DecisionTreeClassifier(max_depth=max_depth, random_state=72).fit(X, y)
+        elif model_type == 'RandomForest':
+            clf_t = RandomForestClassifier(max_depth=max_depth, random_state=72).fit(X, y)
+        else:
+            print('Not valid model type. Using Logistic Regression...')
+            model_type = 'LogisticRegression'
+            clf_t = LogisticRegression(random_state=72).fit(X, y)
         models_t[t] = clf_t
 
-        coeff_index.append(t)
-        coefficients_list.append([clf_t.intercept_[0]] + list(clf_t.coef_[0]))
+        if model_type == 'LogisticRegression':
+            coeff_index.append(t)
+            coefficients_list.append([clf_t.intercept_[0]] + list(clf_t.coef_[0]))
 
-    coefficients = pd.DataFrame(coefficients_list, columns=['intercept'] + list(clf_t.feature_names_in_), index=coeff_index)
+    if model_type == 'LogisticRegression':
+        coefficients = pd.DataFrame(coefficients_list, columns=['intercept'] + list(clf_t.feature_names_in_), index=coeff_index)
 
-    return models_t, coefficients
+        return models_t, coefficients, scaler_params
+    
+    return models_t, None, scaler_params
 
 
-def compute_proba(models_t, t, X):
+def compute_proba(models_t, t, X, logistic_regression=True):
 
-    clf_t = models_t[t]
-    coeff = clf_t.coef_[0]
-    intercept = clf_t.intercept_[0]
+    if logistic_regression:
+        clf_t = models_t[t]
+        coeff = clf_t.coef_[0]
+        intercept = clf_t.intercept_[0]
 
-    return 1/(1+np.exp(- intercept - (coeff*np.array(X)).sum()))
+        return 1/(1+np.exp(- intercept - (coeff*np.array(X)).sum()))
+    
+    else:
+        clf_t = models_t[t]
+        
+        return clf_t.predict_proba(np.array(X).reshape(1,-1))[0,1]
