@@ -28,7 +28,7 @@ def find_roles(log):
         roles_pm4py = pm4py.discover_organizational_roles(log)
         roles = dict()
         for i in range(len(roles_pm4py)):
-            roles['ROLE'+str(i)] =  (roles_pm4py[i].activities, roles_pm4py[i].originator_importance)
+            roles['ROLE'+str(i)] =  (roles_pm4py[i].activities, list(roles_pm4py[i].originator_importance.keys()))
     return roles
 
 
