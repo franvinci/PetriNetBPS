@@ -91,10 +91,11 @@ class SimulatorParameters:
             self.mode_ex_time = mode_ex_time
             exec_distr_acts = find_execution_distributions(log, mode='activity')
             self.exec_distr = find_execution_distributions(log, mode_ex_time)
-            for res in self.exec_distr.keys():
-                for l in self.net_transition_labels:
-                    if l not in self.exec_distr[res].keys():
-                        self.exec_distr[res][l] = exec_distr_acts[l]
+            if mode_ex_time == 'resource':
+                for res in self.exec_distr.keys():
+                    for l in self.net_transition_labels:
+                        if l not in self.exec_distr[res].keys():
+                            self.exec_distr[res][l] = exec_distr_acts[l]
 
         if disc_role_calendars:
             if not self.roles:
@@ -381,6 +382,9 @@ class SimulatorEngine:
 
         log_data = log_data[(log_data['case:concept:name']>int((remove_head_tail/2)*n_istances)) & (log_data['case:concept:name']<=int((remove_head_tail/2)*n_istances)+n_istances)]
         log_data['case:concept:name'] = log_data['case:concept:name'] - log_data['case:concept:name'].min() + 1
+
+        log_data.sort_values(by=['time:timestamp', 'start:timestamp'], inplace=True)
+        log_data.index = range(len(log_data))
 
         # reset
         self.role_resources = None
