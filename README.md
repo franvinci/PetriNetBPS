@@ -197,7 +197,7 @@ The simulator expects event logs in XES format with the following standard attri
 - `time:timestamp`: Event timestamp
 - `start:timestamp`: Activity start time (optional)
 - `org:resource`: Resource identifier
-- `org:role`: Resource role
+- `org:role`: Resource role (Optional)
 - `case:concept:name`: Case identifier
 
 ### Petri Net Format
@@ -223,33 +223,116 @@ The simulator returns a pandas DataFrame with simulated event log data:
 
 ## Advanced Features
 
-### Custom Resource Calendars
+## Modifying Existing Parameters
+
+After discovering parameters from an event log, you can modify them to create different simulation scenarios or test specific configurations.
+
+### Transition Weights
 
 ```python
-# Define custom working hours
-custom_calendar = {
-    'ROLE1': {
+# Modify transition weights for specific scenarios
+# Equal weights for all transitions
+for transition in net.transitions:
+    parameters.transition_weights[transition] = 1.0
+
+# Custom weights based on business rules
+parameters.transition_weights[transition_A] = 0.8  # High priority
+parameters.transition_weights[transition_B] = 0.2  # Low priority
+
+# Disable a specific transition
+parameters.transition_weights[transition_C] = 0.0
+```
+
+### Execution Time Distributions
+
+```python
+# Override execution times for specific activities
+parameters.exec_distr['Activity_A'] = ('normal', {'loc': 3600, 'scale': 600})  # 1 hour mean with 10 min std
+parameters.exec_distr['Activity_B'] = ('exponential', {'loc': 0, 'scale': 1800})  # 30 min average
+parameters.exec_distr['Activity_C'] = ('fixed', {'value': 7200})  # Fixed 2 hours
+
+# Modify resource-level execution times
+parameters.exec_distr['Resource_1']['Activity_A'] = ('uniform', {'loc': 1800, 'scale': 3600})
+```
+
+### Arrival Time Distribution
+
+```python
+# Change case arrival patterns
+parameters.arrival_time_distr = ('exponential', {'loc': 0, 'scale': 3600})  # 1 hour average
+parameters.arrival_time_distr = ('normal', {'loc': 1800, 'scale': 600})  # 30 min mean 10 min std
+parameters.arrival_time_distr = ('uniform', {'loc': 0, 'scale': 7200})  # 0-2 hours uniform
+```
+
+### Resource Configuration
+
+```python
+# Modify resource roles and assignments
+parameters.roles = {
+    'Manager': (['Approve_Request', 'Review_Report'], ['Manager_1', 'Manager_2']),
+    'Analyst': (['Analyze_Data', 'Generate_Report'], ['Analyst_1', 'Analyst_2', 'Analyst_3']),
+    'Clerk': (['Input_Data', 'Validate_Data'], ['Clerk_1', 'Clerk_2'])
+}
+
+# Update resource calendars
+parameters.role_calendars = {
+    'Manager': {
+        'Monday': (8, 18),
+        'Tuesday': (8, 18),
+        'Wednesday': (8, 18),
+        'Thursday': (8, 18),
+        'Friday': (8, 17),
+        'Saturday': None,
+        'Sunday': None
+    },
+    'Analyst': {
         'Monday': (9, 17),
         'Tuesday': (9, 17),
         'Wednesday': (9, 17),
         'Thursday': (9, 17),
         'Friday': (9, 17),
-        'Saturday': None,  # No work
+        'Saturday': None,
         'Sunday': None
     }
 }
-parameters.role_calendars = custom_calendar
+
+# Add new resources to existing roles
+# Get current resources for a role
+current_resources = list(parameters.roles['Analyst'][1])
+
+# Add new resources
+new_resources = ['Analyst_4', 'Analyst_5']
+parameters.roles['Analyst'] = (
+    parameters.roles['Analyst'][0],  # Keep existing activities
+    current_resources + new_resources  # Add new resources to existing list
+)
+
+# Or replace the entire resource list
+parameters.roles['Analyst'] = (
+    parameters.roles['Analyst'][0],  # Keep existing activities
+    ['Analyst_1', 'Analyst_2', 'Analyst_3', 'Analyst_4', 'Analyst_5']  # New resource list
+)
+
+# Create a completely new role with resources
+parameters.roles['Supervisor'] = (
+    ['Supervise_Process', 'Final_Approval'],  # Activities this role can perform
+    ['Supervisor_1', 'Supervisor_2']  # Resources in this role
+)
 ```
 
-### Custom Execution Time Distributions
+### Arrival Calendar
 
 ```python
-# Define custom distributions for activities
-custom_exec_distr = {
-    'Activity_A': ('normal', {'loc': 3600, 'scale': 600}),  # mean 1 hour with std 10 min
-    'Activity_B': ('exponential', {'loc': 0, 'scale': 1800})  # 30 min average
+# Modify case arrival calendar
+parameters.arrival_calendar = {
+    'Monday': (8, 18),
+    'Tuesday': (8, 18),
+    'Wednesday': (8, 18),
+    'Thursday': (8, 18),
+    'Friday': (8, 17),
+    'Saturday': (9, 13),
+    'Sunday': None
 }
-parameters.exec_distr = custom_exec_distr
 ```
 
 ### Resource Availability Management
